@@ -11,19 +11,21 @@ namespace DataProcessingService.Services
 {
     public class ReadDataService : IReadData
     {
-        public void ReadFile(string path, List<ReadDataModel> result)
+        public List<ReadDataModel> ReadFile(string path)
         {
+
+            List<ReadDataModel> result = new List<ReadDataModel>();
 
             if(Path.GetExtension(path) == ".txt")
             {
-                var result2 = File.ReadAllLines(path)
+                    result = File.ReadAllLines(path)
                     .Select(x => ReadMe(x))
                     .Where(record => record.StateCheck != false)
                     .ToList();
             } 
             else if(Path.GetExtension(path) == ".csv")
             {
-                var result2 = File.ReadAllLines(path)
+                    result = File.ReadAllLines(path)
                     .Skip(1)
                     .Select(x => ReadMe(x))
                     .Where(record => record.StateCheck != false)
@@ -32,8 +34,10 @@ namespace DataProcessingService.Services
             } 
             else
             {
-                return;
+                return result;
             }
+
+            return result;
         }
 
         public ReadDataModel ReadMe(string line)

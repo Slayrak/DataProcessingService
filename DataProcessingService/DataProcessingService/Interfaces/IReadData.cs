@@ -10,7 +10,7 @@ namespace DataProcessingService.Interfaces
 {
     public interface IReadData
     {
-        public void ReadFile(string path, List<ReadDataModel> result);
+        public List<ReadDataModel> ReadFile(string path);
         //public bool ReadLine(ReadDataModel readDataModel, string line);
     }
 }

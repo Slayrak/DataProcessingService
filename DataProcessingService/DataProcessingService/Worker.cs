@@ -2,7 +2,9 @@ using DataProcessingService.Interfaces;
 using DataProcessingService.Models;
 using DataProcessingService.ServiceConfig;
 using Microsoft.VisualBasic.FileIO;
+using Newtonsoft.Json;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography.X509Certificates;
 
 namespace DataProcessingService
 {
@@ -24,6 +26,14 @@ namespace DataProcessingService
             while (!stoppingToken.IsCancellationRequested)
             {
                 _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
+
+                var check = Directory.GetFiles(_options.InputDirectory, "*.txt");
+
+                for (int i = 0; i < check.Length; i++)
+                {
+
+                }
+
                 await Task.Delay(1000, stoppingToken);
             }
         }
@@ -33,7 +43,127 @@ namespace DataProcessingService
             var check = Directory.GetFiles(_options.InputDirectory, "*.txt");
             string[] lines = System.IO.File.ReadAllLines(check[0]);
 
-            _readData.ReadFile(check[0], new List<ReadDataModel>());
+            var result = _readData.ReadFile(check[0]);
+
+            List<PostDataModel> posts = new List<PostDataModel>();
+
+            if(result.Count != 0)
+            {
+                Dictionary<string, Dictionary<string, ServiceModel>> map = new Dictionary<string, Dictionary<string, ServiceModel>>();
+
+                Dictionary<string, decimal> totalForCityDict= new Dictionary<string, decimal>();
+
+                decimal totalForCity = 0;
+
+                foreach(var item in result)
+                {
+                    if(map.ContainsKey(item.City))
+                    {
+                        var inner = new Dictionary<string, ServiceModel>();
+
+                        if(map.TryGetValue(item.City, out inner))
+                        {
+                            if(inner.ContainsKey(item.Service))
+                            {
+                                var innerItem = inner.GetValueOrDefault(item.Service);
+
+                                innerItem.Payers.Add(new PayerModel { 
+                                    AccountNumber= item.AccountNumber, 
+                                    Name= item.Name,
+                                    Payment = item.Payment,
+                                    Date = DateOnly.FromDateTime(item.DateTime)
+                                });
+
+                                innerItem.Name = item.Service;
+
+                                innerItem.Total += item.Payment;
+
+                                totalForCityDict[item.City] += item.Payment;
+
+                                totalForCity += item.Payment;
+
+                                inner[item.Service] = innerItem;
+                            } 
+                            else
+                            {
+                                ServiceModel innerItem = new ServiceModel();
+
+                                innerItem.Payers.Add(new PayerModel
+                                {
+                                    AccountNumber = item.AccountNumber,
+                                    Name = item.Name,
+                                    Payment = item.Payment,
+                                    Date = DateOnly.FromDateTime(item.DateTime)
+                                });
+
+                                innerItem.Name = item.Service;
+
+                                innerItem.Total += item.Payment;
+
+                                totalForCityDict[item.City] += item.Payment;
+
+                                totalForCity += item.Payment;
+
+                                inner.Add(item.Service, innerItem);
+                            }
+
+                            map[item.City] = inner;
+                        }
+
+                    } else
+                    {
+                        var inner = new Dictionary<string, ServiceModel>();
+
+                        ServiceModel innerItem = new ServiceModel();
+
+                        innerItem.Payers.Add(new PayerModel
+                        {
+                            AccountNumber = item.AccountNumber,
+                            Name = item.Name,
+                            Payment = item.Payment,
+                            Date = DateOnly.FromDateTime(item.DateTime)
+                        });
+
+                        innerItem.Name = item.Service;
+
+                        innerItem.Total += item.Payment;
+
+
+
+                        totalForCity += item.Payment;
+
+                        inner.Add(item.Service, innerItem);
+
+                        totalForCityDict.Add(item.City, item.Payment);
+
+                        map.Add(item.City, inner);
+                    }
+                }
+
+                foreach(var item in map)
+                {
+                    var toPost = new PostDataModel();
+
+                    toPost.City = item.Key;
+
+                    foreach(var innerItem in item.Value)
+                    {
+                        toPost.Services.Add(innerItem.Value);
+                    }
+
+                    toPost.Total = totalForCityDict[item.Key];
+
+                    posts.Add(toPost);
+
+                }
+                
+            }
+
+            var data = JsonConvert.SerializeObject(posts, Formatting.Indented);
+
+            Console.WriteLine(data);
+
+            File.WriteAllText("C:\\Users\\322TO\\Job\\DataProcessingService\\Output\\check.txt", data);
 
             //List<string> result = new List<string>();
 
@@ -80,7 +210,7 @@ namespace DataProcessingService
             //    var checkbool = true;
             //    ReadDataModel record = new ReadDataModel();
 
-                
+
 
             //    decimal payment;
             //    DateTime date;
@@ -95,7 +225,7 @@ namespace DataProcessingService
             //        checkbool = false;
             //        //return;
             //    }
-                
+
             //    if(checkbool = DateTime.TryParse(output[4], out date))
             //    {
             //        record.DateTime = date.Date;
@@ -122,7 +252,7 @@ namespace DataProcessingService
 
             //}
 
-            
+
 
             return base.StartAsync(cancellationToken);
         }
