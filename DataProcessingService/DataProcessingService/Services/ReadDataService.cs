@@ -11,31 +11,33 @@ namespace DataProcessingService.Services
 {
     public class ReadDataService : IReadData
     {
-        public List<ReadDataModel> ReadFile(string path)
+        public List<ReadDataModel> ReadFile(string path, out int originalNumber)
         {
+
+            originalNumber = 0;
+
+            int counter = 0;
 
             List<ReadDataModel> result = new List<ReadDataModel>();
 
-            if(Path.GetExtension(path) == ".txt")
+            var task = Task.Factory.StartNew(() =>
             {
-                    result = File.ReadAllLines(path)
-                    .Select(x => ReadMe(x))
-                    .Where(record => record.StateCheck != false)
-                    .ToList();
-            } 
-            else if(Path.GetExtension(path) == ".csv")
-            {
-                    result = File.ReadAllLines(path)
-                    .Skip(1)
-                    .Select(x => ReadMe(x))
-                    .Where(record => record.StateCheck != false)
-                    .ToList();
+                Parallel.ForEach(File.ReadLines(path), line =>
+                {
+                    var res = ReadMe(line);
 
-            } 
-            else
-            {
-                return result;
-            }
+                    counter++;
+
+                    if (res.StateCheck != false)
+                    {
+                        result.Add(res);
+                    }
+                });
+            });
+
+            Task.WaitAll(task);
+
+            originalNumber= counter;
 
             return result;
         }
@@ -127,85 +129,5 @@ namespace DataProcessingService.Services
 
             return record;
         }
-
-        //public bool ReadLine(ReadDataModel record, string line)
-        //{
-
-        //    List<string> result = new List<string>();
-
-        //    string toAdd = "";
-
-        //    for (int i = 0; i < line.Length; i++)
-        //    {
-        //        if (!line[i].Equals('"') && line[i] != '”' && line[i] != '“')
-        //        {
-        //            toAdd += line[i];
-        //        }
-        //        else
-        //        {
-        //            result.Add(toAdd);
-        //            toAdd = "";
-        //        }
-        //    }
-
-        //    result.Add(toAdd);
-
-        //    List<string> output = new List<string>();
-
-        //    for (int i = 0; i < result.Count; i++)
-        //    {
-        //        string[] res;
-
-        //        if (i == 1)
-        //        {
-        //            output.Add(result[i].Trim().Split(',')[0]);
-        //        }
-        //        else
-        //        {
-        //            res = result[i].Trim().Split(',');
-        //            output.AddRange(res);
-        //        }
-        //    }
-
-        //    output.RemoveAll(x => x == "");
-
-        //    bool checkbool = true;
-
-        //    if (output.Count != 7)
-        //    {
-        //        return checkbool = false;
-        //    }
-        //    else
-        //    {
-        //        decimal payment;
-        //        DateTime date;
-        //        long acc;
-
-        //        if (!(checkbool = Decimal.TryParse(output[3], out payment)))
-        //        {
-        //            return checkbool;
-        //        }
-
-        //        if (!(checkbool = DateTime.TryParse(output[4], out date)))
-        //        {
-        //            return checkbool;
-        //        }
-
-        //        if (!(checkbool = long.TryParse(output[5], out acc)))
-        //        {
-        //            return checkbool;
-        //        }
-
-        //        record.AccountNumber = acc;
-        //        record.DateTime = date.Date;
-        //        record.Payment = payment;
-        //        record.Name = output[0] + output[1];
-        //        record.City = output[2];
-        //        record.Service = output[6];
-        //    }
-
-
-        //    return checkbool;
-        //}
     }
 }

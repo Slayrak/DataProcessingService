@@ -19,6 +19,7 @@ IHost host = Host.CreateDefaultBuilder(args)
 
         services.AddSingleton(options);
         services.AddSingleton<IReadData, ReadDataService>();
+        services.AddSingleton<IPostData, GetPostDataService>();
         services.AddHostedService<Worker>();
     })
     .Build();
