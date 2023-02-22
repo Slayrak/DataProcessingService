@@ -41,6 +41,8 @@ namespace DataProcessingService
 
                 for (int i = 0; i < check.Length; i++)
                 {
+                    _logger.LogInformation($"Proceeding with file: {check[i]}" , DateTimeOffset.Now);
+
                     if (Path.GetExtension(check[0]) == ".txt" || Path.GetExtension(check[0]) == ".csv")
                     {
                         int smt = 0;
@@ -49,17 +51,19 @@ namespace DataProcessingService
                             
                         var tuple = await _readData.ReadFile(check[i], result, smt);
 
+                        _logger.LogInformation($"Parced file: {check[i]}", DateTimeOffset.Now);
+
                         result = tuple.Item1;
 
                         smt = tuple.Item2;
-
-                        Task.WaitAny();
 
                         List<PostDataModel> posts = new List<PostDataModel>();
 
                         _postData.Categorize(result, posts);
 
                         var data = JsonConvert.SerializeObject(posts, Formatting.Indented);
+
+                        _logger.LogInformation($"Converted data", DateTimeOffset.Now);
 
                         var directories = Directory.GetDirectories(_options.OutputDirectory);
 
@@ -77,6 +81,8 @@ namespace DataProcessingService
                                 byte[] info = new UTF8Encoding(true).GetBytes(data);
 
                                 fs.Write(info, 0, info.Length);
+
+                                _logger.LogInformation($"Record is written", DateTimeOffset.Now);
                             }
                         }
                         else
@@ -88,6 +94,8 @@ namespace DataProcessingService
                                 byte[] info = new UTF8Encoding(true).GetBytes(data);
 
                                 fs.Write(info, 0, info.Length);
+
+                                _logger.LogInformation($"Record is written", DateTimeOffset.Now);
                             }
 
                             metaLogPath = Path.Combine(_options.OutputDirectory, DateTime.Now.ToString("MM-dd-yyyy"), "meta.log");
@@ -117,9 +125,13 @@ namespace DataProcessingService
                             byte[] info = new UTF8Encoding(true).GetBytes(metadata);
 
                             fs.Write(info, 0, info.Length);
+
+                            _logger.LogInformation($"meta.log recorded", DateTimeOffset.Now);
                         }
 
                         File.Delete(check[i]);
+
+                        _logger.LogInformation($"{check[i]} deleted", DateTimeOffset.Now);
 
                     } 
                     else
@@ -132,6 +144,8 @@ namespace DataProcessingService
 
         public override Task StartAsync(CancellationToken cancellationToken)
         {
+
+            _logger.LogInformation("Service is starting", DateTimeOffset.Now);
 
             var directories = Directory.GetDirectories(_options.OutputDirectory);
 
