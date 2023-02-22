@@ -1,3 +1,4 @@
+using DataProcessingService.Helpers;
 using DataProcessingService.Interfaces;
 using DataProcessingService.Models;
 using DataProcessingService.ServiceConfig;
@@ -20,6 +21,7 @@ namespace DataProcessingService
         private string metaLogPath;
         private MetaLogModel _logModel;
         private IHostApplicationLifetime _applicationLifetime;
+        private readonly FileSystemWatcher _fileSystemWatcher;
 
 
         public Worker(ILogger<Worker> logger, DataProcessingConfig dataProcessingConfig, IReadData readData, IPostData postData, IHostApplicationLifetime applicationLifetime)
@@ -29,116 +31,85 @@ namespace DataProcessingService
             _readData = readData;
             _postData = postData;
             _applicationLifetime = applicationLifetime;
+            _fileSystemWatcher = new FileSystemWatcher(_options.InputDirectory);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            while (!stoppingToken.IsCancellationRequested)
+            try
             {
-                _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
-
-                var check = Directory.GetFiles(_options.InputDirectory);
-
-                for (int i = 0; i < check.Length; i++)
+                while (!stoppingToken.IsCancellationRequested)
                 {
-                    _logger.LogInformation($"Proceeding with file: {check[i]}" , DateTimeOffset.Now);
+                    var check = Directory.GetFiles(_options.InputDirectory);
 
-                    if (Path.GetExtension(check[0]) == ".txt" || Path.GetExtension(check[0]) == ".csv")
+                    for (int i = 0; i < check.Length; i++)
                     {
-                        int smt = 0;
-
-                        var result = new List<ReadDataModel>(); 
-                            
-                        var tuple = await _readData.ReadFile(check[i], result, smt);
-
-                        _logger.LogInformation($"Parced file: {check[i]}", DateTimeOffset.Now);
-
-                        result = tuple.Item1;
-
-                        smt = tuple.Item2;
-
-                        List<PostDataModel> posts = new List<PostDataModel>();
-
-                        _postData.Categorize(result, posts);
-
-                        var data = JsonConvert.SerializeObject(posts, Formatting.Indented);
-
-                        _logger.LogInformation($"Converted data", DateTimeOffset.Now);
-
-                        var directories = Directory.GetDirectories(_options.OutputDirectory);
-
-                        directories = directories.Select(x => x.Substring(_options.OutputDirectory.Length + 1)).ToArray();
-
-                        if (directories.Contains(DateTime.Now.ToString("MM-dd-yyyy")))
+                        if (IsFileLockedHelper.IsFileLocked(new FileInfo(check[i])))
                         {
-                            var number = Directory.GetFiles(Path.Combine(_options.OutputDirectory,DateTime.Now.ToString("MM-dd-yyyy")));
+                            continue;
+                        }
 
-                            var files = number.Select(x => x).Where(x => x.Contains("output")).ToList();
+                        _logger.LogInformation($"Proceeding with file: {check[i]}", DateTimeOffset.Now);
 
-                            int orderNumber = files.Count + 1;
-                            using (FileStream fs = File.Create(Path.Combine(_options.OutputDirectory, DateTime.Now.ToString("MM-dd-yyyy"), $"output{orderNumber}.json")))
+                        if (Path.GetExtension(check[0]) == ".txt" || Path.GetExtension(check[0]) == ".csv")
+                        {
+                            int smt = 0;
+                            var result = new List<ReadDataModel>();
+                            var tuple = await _readData.ReadFile(check[i], result);
+
+                            _logger.LogInformation($"Parced file: {check[i]}", DateTimeOffset.Now);
+
+                            result = tuple.Item1;
+                            smt = tuple.Item2;
+
+                            List<PostDataModel> posts = new List<PostDataModel>();
+                            _postData.Categorize(result, posts);
+                            var data = JsonConvert.SerializeObject(posts, Formatting.Indented);
+
+                            _logger.LogInformation($"Converted data", DateTimeOffset.Now);
+
+                            CreateDirectoryHelper.CreateAfterMidnight(_options.OutputDirectory, data, _logger, ref metaLogPath, ref _logModel);
+
+                            if (Path.GetExtension(check[i]) == ".csv")
                             {
-                                byte[] info = new UTF8Encoding(true).GetBytes(data);
+                                smt -= 1;
+                            }
+
+                            if (result.Count != smt)
+                            {
+                                _logModel.invalid_files.Add(check[i]);
+                                _logModel.found_errors += smt - result.Count;
+                            }
+
+                            _logModel.parsed_files += 1;
+                            _logModel.parced_lines += smt;
+
+                            var metadata = JsonConvert.SerializeObject(_logModel, Formatting.Indented);
+
+                            using (FileStream fs = File.OpenWrite(metaLogPath))
+                            {
+                                byte[] info = new UTF8Encoding(true).GetBytes(metadata);
 
                                 fs.Write(info, 0, info.Length);
 
-                                _logger.LogInformation($"Record is written", DateTimeOffset.Now);
+                                _logger.LogInformation($"meta.log recorded", DateTimeOffset.Now);
                             }
+
+                            File.Delete(check[i]);
+
+                            _logger.LogInformation($"{check[i]} deleted", DateTimeOffset.Now);
+
                         }
                         else
                         {
-                            Directory.CreateDirectory(Path.Combine(_options.OutputDirectory, DateTime.Now.ToString("MM-dd-yyyy")));
-
-                            using(FileStream fs = File.Create(Path.Combine(_options.OutputDirectory, DateTime.Now.ToString("MM-dd-yyyy"), "output1.json")))
-                            {
-                                byte[] info = new UTF8Encoding(true).GetBytes(data);
-
-                                fs.Write(info, 0, info.Length);
-
-                                _logger.LogInformation($"Record is written", DateTimeOffset.Now);
-                            }
-
-                            metaLogPath = Path.Combine(_options.OutputDirectory, DateTime.Now.ToString("MM-dd-yyyy"), "meta.log");
-                            using (File.Create(metaLogPath))
-
-                            _logModel = new MetaLogModel();
+                            continue;
                         }
-
-                        if(Path.GetExtension(check[0]) == ".csv")
-                        {
-                            smt -= 1;
-                        }
-
-                        if (result.Count != smt)
-                        {
-                            _logModel.invalid_files.Add(check[i]);
-                            _logModel.found_errors += smt - result.Count;
-                        }
-
-                        _logModel.parsed_files += 1;
-                        _logModel.parced_lines += smt;
-
-                        var metadata = JsonConvert.SerializeObject(_logModel, Formatting.Indented);
-
-                        using (FileStream fs = File.OpenWrite(metaLogPath))
-                        {
-                            byte[] info = new UTF8Encoding(true).GetBytes(metadata);
-
-                            fs.Write(info, 0, info.Length);
-
-                            _logger.LogInformation($"meta.log recorded", DateTimeOffset.Now);
-                        }
-
-                        File.Delete(check[i]);
-
-                        _logger.LogInformation($"{check[i]} deleted", DateTimeOffset.Now);
-
-                    } 
-                    else
-                    {
-                        continue;
                     }
                 }
+            } catch(Exception ex)
+            {
+                _logger.LogError(ex.Message);
+                _applicationLifetime.StopApplication();
             }
         }
 
@@ -147,45 +118,9 @@ namespace DataProcessingService
 
             _logger.LogInformation("Service is starting", DateTimeOffset.Now);
 
-            var directories = Directory.GetDirectories(_options.OutputDirectory);
+            _logger.LogInformation("Starting from: " + Directory.GetCurrentDirectory());
 
-            directories = directories.Select(x => x.Substring(_options.OutputDirectory.Length + 1)).ToArray();
-
-            if (directories.Contains(DateTime.Now.ToString("MM-dd-yyyy")))
-            {
-
-                var test = Path.Combine(_options.OutputDirectory, DateTime.Now.ToString("MM-dd-yyyy"));
-
-                var number = Directory.GetFiles(test);
-
-                var files = number.Select(x => x).Where(x => x.Contains("meta.log")).ToList();
-
-                if(files.Count != 0)
-                {
-                    metaLogPath = files[0];
-
-                    var meta = File.ReadAllText(metaLogPath);
-
-                    _logModel = JsonConvert.DeserializeObject<MetaLogModel>(meta);
-
-                    if(_logModel == null)
-                    {
-                        _logModel= new MetaLogModel();
-                    }
-
-                } else
-                {
-                    using (File.Create(Path.Combine(_options.OutputDirectory, DateTime.Now.ToString("MM-dd-yyyy"), "meta.log")))
-
-                    metaLogPath = Path.Combine(_options.OutputDirectory, DateTime.Now.ToString("MM-dd-yyyy"), "meta.log");
-
-                    _logModel = new MetaLogModel();
-                }
-            }
-            else
-            {
-                _logModel = new MetaLogModel();
-            }
+            CreateDirectoryHelper.CreateOnInit(ref metaLogPath, _options.OutputDirectory, ref _logModel);
 
             return base.StartAsync(cancellationToken);
         }

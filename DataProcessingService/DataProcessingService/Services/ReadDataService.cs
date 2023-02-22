@@ -11,23 +11,23 @@ namespace DataProcessingService.Services
 {
     public class ReadDataService : IReadData
     {
-        public async Task<Tuple<List<ReadDataModel>, int>> ReadFile(string path, List<ReadDataModel> result, int originalNumber)
+        public async Task<Tuple<List<ReadDataModel>, int>> ReadFile(string path, List<ReadDataModel> result)
         {
-
-            originalNumber = 0;
-
             int counter = 0;
 
             result = new List<ReadDataModel>();
 
-            await Task.Factory.StartNew(() =>
+            //var check = await File.ReadAllLinesAsync(path);
+
+            using (StreamReader sr = new StreamReader(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)))
             {
-                Parallel.ForEach(File.ReadLines(path), line =>
+                string line;
+
+                while ((line = await sr.ReadLineAsync()) != null)
                 {
-                    if(line != "")
+                    if (line != "")
                     {
                         var res = ReadMe(line);
-
                         counter++;
 
                         if (res.StateCheck != false)
@@ -35,12 +35,26 @@ namespace DataProcessingService.Services
                             result.Add(res);
                         }
                     }
-                });
-            });
+                }
+                sr.Close();
 
-            originalNumber = counter;
+            }
 
-            return new Tuple<List<ReadDataModel>, int>(result, originalNumber);
+                //foreach (var line in check)
+                //{
+                //    if (line != "")
+                //    {
+                //        var res = ReadMe(line);
+                //        counter++;
+
+                //        if (res.StateCheck != false)
+                //        {
+                //            result.Add(res);
+                //        }
+                //    }
+                //}
+
+            return new Tuple<List<ReadDataModel>, int>(result, counter);
         }
 
         public ReadDataModel ReadMe(string line)
@@ -97,8 +111,6 @@ namespace DataProcessingService.Services
                 decimal payment;
                 DateTime date;
                 long acc;
-
-                date = DateTime.ParseExact(output[4], "yyyy-dd-MM", null, DateTimeStyles.AllowLeadingWhite);
 
                 if (!(checkbool = Decimal.TryParse(output[3], NumberStyles.Any, CultureInfo.InvariantCulture, out payment)))
                 {

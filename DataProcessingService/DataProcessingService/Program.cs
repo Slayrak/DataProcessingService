@@ -4,16 +4,19 @@ using DataProcessingService.ServiceConfig;
 using DataProcessingService.Services;
 using Serilog;
 
-var logPath = Directory.GetParent(Directory.GetCurrentDirectory()).ToString();
+//var logPath = Directory.GetParent(Directory.GetCurrentDirectory()).ToString();
+var logpath = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
-    .WriteTo.File(Path.Combine(logPath, "Logs", "log.txt"))
+    .WriteTo.File(Path.Combine(logpath, "DataProcessingLogs", "log.txt"))
     .CreateLogger();
 
 try
 {
     IHost host = Host.CreateDefaultBuilder(args)
     .UseSerilog()
+    .UseWindowsService()
     .ConfigureServices((hostContext, services) =>
     {
         IConfiguration configuration = hostContext.Configuration;
