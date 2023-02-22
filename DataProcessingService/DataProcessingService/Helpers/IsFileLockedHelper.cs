@@ -22,7 +22,6 @@ namespace DataProcessingService.Helpers
                 return true;
             }
 
-            //file is not locked
             return false;
         }
     }
