@@ -10,6 +10,6 @@ namespace DataProcessingService.Interfaces
 {
     public interface IReadData
     {
-        public List<ReadDataModel> ReadFile(string path, out int originalNumber);
+        public Task<Tuple<List<ReadDataModel>, int>> ReadFile(string path, List<ReadDataModel> result, int originalNumber);
     }
 }

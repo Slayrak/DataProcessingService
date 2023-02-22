@@ -11,35 +11,36 @@ namespace DataProcessingService.Services
 {
     public class ReadDataService : IReadData
     {
-        public List<ReadDataModel> ReadFile(string path, out int originalNumber)
+        public async Task<Tuple<List<ReadDataModel>, int>> ReadFile(string path, List<ReadDataModel> result, int originalNumber)
         {
 
             originalNumber = 0;
 
             int counter = 0;
 
-            List<ReadDataModel> result = new List<ReadDataModel>();
+            result = new List<ReadDataModel>();
 
-            var task = Task.Factory.StartNew(() =>
+            await Task.Factory.StartNew(() =>
             {
                 Parallel.ForEach(File.ReadLines(path), line =>
                 {
-                    var res = ReadMe(line);
-
-                    counter++;
-
-                    if (res.StateCheck != false)
+                    if(line != "")
                     {
-                        result.Add(res);
+                        var res = ReadMe(line);
+
+                        counter++;
+
+                        if (res.StateCheck != false)
+                        {
+                            result.Add(res);
+                        }
                     }
                 });
             });
 
-            Task.WaitAll(task);
+            originalNumber = counter;
 
-            originalNumber= counter;
-
-            return result;
+            return new Tuple<List<ReadDataModel>, int>(result, originalNumber);
         }
 
         public ReadDataModel ReadMe(string line)

@@ -1,11 +1,13 @@
 using DataProcessingService.Interfaces;
 using DataProcessingService.Models;
 using DataProcessingService.ServiceConfig;
+using Microsoft.Extensions.Hosting;
 using Microsoft.VisualBasic.FileIO;
 using Newtonsoft.Json;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 
 namespace DataProcessingService
 {
@@ -17,14 +19,16 @@ namespace DataProcessingService
         private readonly IPostData _postData;
         private string metaLogPath;
         private MetaLogModel _logModel;
+        private IHostApplicationLifetime _applicationLifetime;
 
 
-        public Worker(ILogger<Worker> logger, DataProcessingConfig dataProcessingConfig, IReadData readData, IPostData postData)
+        public Worker(ILogger<Worker> logger, DataProcessingConfig dataProcessingConfig, IReadData readData, IPostData postData, IHostApplicationLifetime applicationLifetime)
         {
             _logger = logger;
             _options = dataProcessingConfig;
             _readData = readData;
             _postData = postData;
+            _applicationLifetime = applicationLifetime;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -37,77 +41,19 @@ namespace DataProcessingService
 
                 for (int i = 0; i < check.Length; i++)
                 {
-                    if (Path.GetExtension(check[0]) == ".txt")
+                    if (Path.GetExtension(check[0]) == ".txt" || Path.GetExtension(check[0]) == ".csv")
                     {
-                        int smt;
+                        int smt = 0;
 
-                        var result = _readData.ReadFile(check[i], out smt);
-                        List<PostDataModel> posts = new List<PostDataModel>();
+                        var result = new List<ReadDataModel>(); 
+                            
+                        var tuple = await _readData.ReadFile(check[i], result, smt);
 
-                        _postData.Categorize(result, posts);
+                        result = tuple.Item1;
 
-                        var data = JsonConvert.SerializeObject(posts, Formatting.Indented);
+                        smt = tuple.Item2;
 
-                        var directories = Directory.GetDirectories(_options.OutputDirectory);
-
-                        directories = directories.Select(x => x.Substring(_options.OutputDirectory.Length + 1)).ToArray();
-
-                        if (directories.Contains(DateTime.Now.ToString("MM-dd-yyyy")))
-                        {
-                            var number = Directory.GetFiles(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy"));
-
-                            if (number.Length != 0)
-                            {
-                                var files = number.Select(x => x).Where(x => x.Contains("output")).ToList();
-
-                                int orderNumber = files.Count + 1;
-                                File.Create(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + $"output{orderNumber}.json");
-
-                                File.WriteAllText(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + $"output{orderNumber}.json", data);
-                            }
-                            else
-                            {
-                                File.Create(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + "output1.json");
-
-                                File.WriteAllText(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + "output1.json", data);
-                            }
-                        }
-                        else
-                        {
-                            Directory.CreateDirectory(_options.OutputDirectory + '/' + DateTime.Now.ToString("MM-dd-yyyy"));
-
-                            File.Create(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + "output1.json");
-
-                            File.WriteAllText(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + "output1.json", data);
-                            File.WriteAllText(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + "meta.log", data);
-
-                            metaLogPath = _options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + "meta.log";
-                            File.Create(metaLogPath);
-
-                            _logModel = new MetaLogModel();
-                        }
-
-                        if (result.Count != smt)
-                        {
-                            _logModel.invalid_files.Add(check[i]);
-                            _logModel.found_errors += smt - result.Count;
-                        }
-
-                        _logModel.parsed_files += 1;
-                        _logModel.parced_lines += smt;
-
-                        var metadata = JsonConvert.SerializeObject(_logModel, Formatting.Indented);
-
-                        File.WriteAllText(metaLogPath, metadata);
-
-                        File.Delete(check[i]);
-
-                    } else if (Path.GetExtension(check[0]) == ".csv")
-                    {
-                        int smt;
-                        var result = _readData.ReadFile(check[i], out smt);
-
-                        smt -= 1;
+                        Task.WaitAny();
 
                         List<PostDataModel> posts = new List<PostDataModel>();
 
@@ -121,37 +67,38 @@ namespace DataProcessingService
 
                         if (directories.Contains(DateTime.Now.ToString("MM-dd-yyyy")))
                         {
-                            var number = Directory.GetFiles(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy"));
+                            var number = Directory.GetFiles(Path.Combine(_options.OutputDirectory,DateTime.Now.ToString("MM-dd-yyyy")));
 
-                            if (number.Length != 0)
+                            var files = number.Select(x => x).Where(x => x.Contains("output")).ToList();
+
+                            int orderNumber = files.Count + 1;
+                            using (FileStream fs = File.Create(Path.Combine(_options.OutputDirectory, DateTime.Now.ToString("MM-dd-yyyy"), $"output{orderNumber}.json")))
                             {
-                                var files = number.Select(x => x).Where(x => x.Contains("output")).ToList();
+                                byte[] info = new UTF8Encoding(true).GetBytes(data);
 
-                                int orderNumber = files.Count + 1;
-                                File.Create(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + $"output{orderNumber}.json");
-
-                                File.WriteAllText(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + $"output{orderNumber}.json", data);
-                            }
-                            else
-                            {
-                                File.Create(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + "output1.json");
-
-                                File.WriteAllText(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + "output1.json", data);
+                                fs.Write(info, 0, info.Length);
                             }
                         }
                         else
                         {
-                            Directory.CreateDirectory(_options.OutputDirectory + '/' + DateTime.Now.ToString("MM-dd-yyyy"));
+                            Directory.CreateDirectory(Path.Combine(_options.OutputDirectory, DateTime.Now.ToString("MM-dd-yyyy")));
 
-                            File.Create(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + "output1.json");
+                            using(FileStream fs = File.Create(Path.Combine(_options.OutputDirectory, DateTime.Now.ToString("MM-dd-yyyy"), "output1.json")))
+                            {
+                                byte[] info = new UTF8Encoding(true).GetBytes(data);
 
-                            File.WriteAllText(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + "output1.json", data);
+                                fs.Write(info, 0, info.Length);
+                            }
 
-                            metaLogPath = _options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + "meta.log";
-
-                            File.Create(metaLogPath);
+                            metaLogPath = Path.Combine(_options.OutputDirectory, DateTime.Now.ToString("MM-dd-yyyy"), "meta.log");
+                            using (File.Create(metaLogPath))
 
                             _logModel = new MetaLogModel();
+                        }
+
+                        if(Path.GetExtension(check[0]) == ".csv")
+                        {
+                            smt -= 1;
                         }
 
                         if (result.Count != smt)
@@ -164,150 +111,27 @@ namespace DataProcessingService
                         _logModel.parced_lines += smt;
 
                         var metadata = JsonConvert.SerializeObject(_logModel, Formatting.Indented);
-                        
-                        File.WriteAllText(metaLogPath, metadata);
+
+                        using (FileStream fs = File.OpenWrite(metaLogPath))
+                        {
+                            byte[] info = new UTF8Encoding(true).GetBytes(metadata);
+
+                            fs.Write(info, 0, info.Length);
+                        }
 
                         File.Delete(check[i]);
 
-                    } else
+                    } 
+                    else
                     {
                         continue;
                     }
                 }
-
-                await Task.Delay(1000, stoppingToken);
             }
         }
 
         public override Task StartAsync(CancellationToken cancellationToken)
         {
-            //var check = Directory.GetFiles(_options.InputDirectory, "*.txt");
-            //string[] lines = System.IO.File.ReadAllLines(check[0]);
-
-            //int smt;
-            //var result = _readData.ReadFile(check[0], out smt);
-
-            //List<PostDataModel> posts = new List<PostDataModel>();
-
-            //_postData.Categorize(result, posts);
-
-            //var data = JsonConvert.SerializeObject(posts, Formatting.Indented);
-
-            //File.WriteAllText(_options.OutputDirectory + "/check.txt", data);
-
-            //var directories = Directory.GetDirectories(_options.OutputDirectory);
-
-            //directories = directories.Select(x => x.Substring(_options.OutputDirectory.Length + 1)).ToArray();
-
-            ////File.Delete(check[0]);
-
-            //if(directories.Contains(DateTime.Now.ToString("MM-dd-yyyy")))
-            //{
-            //    var number = Directory.GetFiles(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy"));
-
-            //    if (number.Length != 0)
-            //    {
-            //        var files = number.Select(x => x).Where(x => x.Contains("output")).ToList();
-
-            //        int orderNumber = files.Count + 1;
-            //        File.Create(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + $"output{orderNumber}.json");
-            //    }
-            //    else
-            //    {
-            //        File.Create(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy") + "/" + "output1.json");
-            //    }
-            //}
-            //else
-            //{
-            //    Directory.CreateDirectory(_options.OutputDirectory + '/' + DateTime.Now.ToString("MM-dd-yyyy"));
-            //}
-
-            //List<string> result = new List<string>();
-
-            //string toAdd = "";
-
-            //for (int i = 0; i < lines[0].Length; i++)
-            //{
-            //    //|| lines[0][i] != '”' || lines[0][i] != '“'
-
-            //    if (!lines[0][i].Equals('"') && lines[0][i] != '”' && lines[0][i] != '“')
-            //    {
-            //        toAdd += lines[0][i];
-            //    } else
-            //    {
-            //        result.Add(toAdd);
-            //        toAdd = "";
-            //    }
-            //}
-            //result.Add(toAdd);
-
-            //List<string> output = new List<string>();
-
-            //for (int i = 0; i < result.Count; i++)
-            //{
-            //    string[] res;
-
-            //    if(i == 1)
-            //    {
-            //        output.Add(result[i].Trim().Split(',')[0]);
-            //    } else
-            //    {
-            //        res = result[i].Trim().Split(',');
-            //        output.AddRange(res);
-            //    }
-            //}
-
-            //output.RemoveAll(x => x == "");
-
-            //if(output.Count != 7)
-            //{
-            //    var checkbool = false;
-            //} else
-            //{
-            //    var checkbool = true;
-            //    ReadDataModel record = new ReadDataModel();
-
-
-
-            //    decimal payment;
-            //    DateTime date;
-            //    long acc;
-
-            //    if (checkbool = Decimal.TryParse(output[3], out payment))
-            //    {
-            //        record.Payment = payment;
-            //    } 
-            //    else
-            //    {
-            //        checkbool = false;
-            //        //return;
-            //    }
-
-            //    if(checkbool = DateTime.TryParse(output[4], out date))
-            //    {
-            //        record.DateTime = date.Date;
-            //    } 
-            //    else
-            //    {
-            //        checkbool = false;
-            //        //return;
-            //    }
-
-            //    if (checkbool = long.TryParse(output[5], out acc))
-            //    {
-            //        record.AccountNumber = acc;
-            //    } 
-            //    else
-            //    {
-            //        checkbool = false;
-            //        //return;
-            //    }
-
-            //    record.Name = output[0] + output[1];
-            //    record.City = output[2];
-            //    record.Service = output[6];
-
-            //}
 
             var directories = Directory.GetDirectories(_options.OutputDirectory);
 
@@ -315,16 +139,34 @@ namespace DataProcessingService
 
             if (directories.Contains(DateTime.Now.ToString("MM-dd-yyyy")))
             {
-                var number = Directory.GetFiles(_options.OutputDirectory + "/" + DateTime.Now.ToString("MM-dd-yyyy"));
+
+                var test = Path.Combine(_options.OutputDirectory, DateTime.Now.ToString("MM-dd-yyyy"));
+
+                var number = Directory.GetFiles(test);
 
                 var files = number.Select(x => x).Where(x => x.Contains("meta.log")).ToList();
 
-                metaLogPath = files[0];
+                if(files.Count != 0)
+                {
+                    metaLogPath = files[0];
 
-                var meta = File.ReadAllText(metaLogPath);
+                    var meta = File.ReadAllText(metaLogPath);
 
-                _logModel = JsonConvert.DeserializeObject<MetaLogModel>(meta);
+                    _logModel = JsonConvert.DeserializeObject<MetaLogModel>(meta);
 
+                    if(_logModel == null)
+                    {
+                        _logModel= new MetaLogModel();
+                    }
+
+                } else
+                {
+                    using (File.Create(Path.Combine(_options.OutputDirectory, DateTime.Now.ToString("MM-dd-yyyy"), "meta.log")))
+
+                    metaLogPath = Path.Combine(_options.OutputDirectory, DateTime.Now.ToString("MM-dd-yyyy"), "meta.log");
+
+                    _logModel = new MetaLogModel();
+                }
             }
             else
             {
@@ -332,6 +174,15 @@ namespace DataProcessingService
             }
 
             return base.StartAsync(cancellationToken);
+        }
+
+        public override Task StopAsync(CancellationToken cancellationToken)
+        {
+
+            _logger.LogInformation("Shutting down service");
+
+            _applicationLifetime.StopApplication();
+            return base.StopAsync(cancellationToken);
         }
     }
 }
