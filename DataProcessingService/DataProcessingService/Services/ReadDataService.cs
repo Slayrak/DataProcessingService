@@ -17,8 +17,6 @@ namespace DataProcessingService.Services
 
             result = new List<ReadDataModel>();
 
-            //var check = await File.ReadAllLinesAsync(path);
-
             using (StreamReader sr = new StreamReader(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)))
             {
                 string line;
@@ -39,20 +37,6 @@ namespace DataProcessingService.Services
                 sr.Close();
 
             }
-
-                //foreach (var line in check)
-                //{
-                //    if (line != "")
-                //    {
-                //        var res = ReadMe(line);
-                //        counter++;
-
-                //        if (res.StateCheck != false)
-                //        {
-                //            result.Add(res);
-                //        }
-                //    }
-                //}
 
             return new Tuple<List<ReadDataModel>, int>(result, counter);
         }
