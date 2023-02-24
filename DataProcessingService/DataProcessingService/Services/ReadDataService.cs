@@ -34,7 +34,6 @@ namespace DataProcessingService.Services
                         }
                     }
                 }
-                sr.Close();
 
             }
 

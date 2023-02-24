@@ -21,7 +21,6 @@ namespace DataProcessingService
         private string metaLogPath;
         private MetaLogModel _logModel;
         private IHostApplicationLifetime _applicationLifetime;
-        private readonly FileSystemWatcher _fileSystemWatcher;
 
 
         public Worker(ILogger<Worker> logger, DataProcessingConfig dataProcessingConfig, IReadData readData, IPostData postData, IHostApplicationLifetime applicationLifetime)
@@ -31,7 +30,6 @@ namespace DataProcessingService
             _readData = readData;
             _postData = postData;
             _applicationLifetime = applicationLifetime;
-            _fileSystemWatcher = new FileSystemWatcher(_options.InputDirectory);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -49,10 +47,10 @@ namespace DataProcessingService
                             continue;
                         }
 
-                        _logger.LogInformation($"Proceeding with file: {check[i]}", DateTimeOffset.Now);
-
                         if (Path.GetExtension(check[0]) == ".txt" || Path.GetExtension(check[0]) == ".csv")
                         {
+                            _logger.LogInformation($"Proceeding with file: {check[i]}", DateTimeOffset.Now);
+
                             int smt = 0;
                             var result = new List<ReadDataModel>();
                             var tuple = await _readData.ReadFile(check[i], result);
@@ -115,6 +113,17 @@ namespace DataProcessingService
 
         public override Task StartAsync(CancellationToken cancellationToken)
         {
+
+            if(!Directory.Exists(_options.InputDirectory))
+            {
+                Directory.CreateDirectory(_options.InputDirectory);
+
+            }
+            
+            if(!Directory.Exists(_options.OutputDirectory))
+            {
+                Directory.CreateDirectory(_options.OutputDirectory);
+            }
 
             _logger.LogInformation("Service is starting", DateTimeOffset.Now);
 
