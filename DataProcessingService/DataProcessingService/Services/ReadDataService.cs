@@ -1,4 +1,5 @@
-﻿using DataProcessingService.Interfaces;
+﻿using DataProcessingService.Helpers;
+using DataProcessingService.Interfaces;
 using DataProcessingService.Models;
 using System;
 using System.Collections.Generic;
@@ -80,50 +81,9 @@ namespace DataProcessingService.Services
 
             output.RemoveAll(x => x == "");
 
-            bool checkbool = true;
+            var factory = new ReadDataModelCreator(output);
 
-            ReadDataModel record = new ReadDataModel();
-
-            if (output.Count != 7)
-            {
-                record.StateCheck = false;
-                return record;
-            }
-            else
-            {
-                decimal payment;
-                DateTime date;
-                long acc;
-
-                if (!(checkbool = Decimal.TryParse(output[3], NumberStyles.Any, CultureInfo.InvariantCulture, out payment)))
-                {
-                    record.StateCheck = false;
-                    return record;
-                }
-
-                if (!(checkbool = DateTime.TryParseExact(output[4], "yyyy-dd-MM", null, DateTimeStyles.AllowLeadingWhite, out date)))
-                {
-                    record.StateCheck = false;
-                    return record; ;
-                }
-
-                if (!(checkbool = long.TryParse(output[5], out acc)))
-                {
-                    record.StateCheck = false;
-                    return record;
-                }
-
-                record.AccountNumber = acc;
-                record.DateTime = date.Date;
-                record.Payment = payment;
-                record.Name = output[0] + output[1];
-                record.City = output[2];
-                record.Service = output[6];
-                record.StateCheck = true;
-            }
-
-
-            return record;
+            return (ReadDataModel)factory.FactoryMethod();
         }
     }
 }

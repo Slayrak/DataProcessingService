@@ -1,4 +1,5 @@
-﻿using System;
+﻿using DataProcessingService.Interfaces;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -6,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace DataProcessingService.Models
 {
-    public class PostDataModel
+    public class PostDataModel : IFactoryProduct
     {
         //public Dictionary<string, Dictionary<string, ServiceModel>> Cities { get; set; }
 

@@ -1,4 +1,5 @@
-﻿using DataProcessingService.Interfaces;
+﻿using DataProcessingService.Helpers;
+using DataProcessingService.Interfaces;
 using DataProcessingService.Models;
 using Microsoft.Extensions.Hosting;
 using System;
@@ -100,18 +101,9 @@ namespace DataProcessingService.Services
 
                 foreach (var item in map)
                 {
-                    var toPost = new PostDataModel();
+                    var factory = new PostDataCreator(item.Key, item.Value, totalForCityDict);
 
-                    toPost.City = item.Key;
-
-                    foreach (var innerItem in item.Value)
-                    {
-                        toPost.Services.Add(innerItem.Value);
-                    }
-
-                    toPost.Total = totalForCityDict[item.Key];
-
-                    pdm.Add(toPost);
+                    pdm.Add((PostDataModel)factory.FactoryMethod());
 
                 }
 
